@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Balloon Pop Game 🎈</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background-color: #b3e5fc;
+      font-family: Arial, sans-serif;
+    }
+
+    .game-container {
+      text-align: center;
+    }
+
+    #game-area {
+      position: relative;
+      width: 500px;
+      height: 600px;
+      border: 2px solid #0288d1;
+      background-color: #e1f5fe;
+      overflow: hidden;
+      margin: 20px auto;
+      border-radius: 15px;
+    }
+
+    .balloon, .bomb {
+      position: absolute;
+      width: 80px; /* Adjusted for better visibility */
+      height: 120px; /* Adjusted for better visibility */
+      cursor: pointer;
+      opacity: 0;
+      animation: rise 4s linear forwards;
+      transition: transform 0.2s ease, opacity 0.2s ease;
+    }
+
+    @keyframes rise {
+      from {
+        bottom: -130px; /* Adjusted for the height of the balloon */
+        opacity: 1;
+      }
+      to {
+        bottom: 100%;
+        opacity: 0;
+      }
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      justify-content: center;
+      align-items: center;
+    }
+
+    .modal-content {
+      background-color: #fff;
+      padding: 20px;
+      border-radius: 10px;
+      text-align: center;
+    }
+
+    #timer, #score-board {
+      font-size: 1.5rem;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="game-container">
+    <h1>Balloon Pop Game 🎈</h1>
+    <div id="score-board">
+      Score: <span id="score">0</span> | Best: <span id="best-score">0</span>
+    </div>
+    <div id="timer">Time Left: <span id="time-left">30</span>s</div>
+    <div id="game-area"></div>
+    <button id="start-btn">Start Game</button>
+  </div>
+
+  <div id="game-over-modal" class="modal">
+    <div class="modal-content">
+      <h2>Game Over! 🎮</h2>
+      <p>Your final score is: <span id="final-score">0</span></p>
+      <button id="restart-btn">Restart</button>
+    </div>
+  </div>
+
+  <div id="rules-modal" class="modal">
+    <div class="modal-content">
+      <h2>Game Rules 📝</h2>
+      <p>🎈 Click balloons to get +10 points!</p>
+      <p>💣 Click bombs to lose -5 points!</p>
+      <p>⏰ Get as many points as possible in 30 seconds!</p>
+      <button id="close-rules-btn">Got it!</button>
+    </div>
+  </div>
+
+  <script>
+    const gameArea = document.getElementById('game-area');
+    const scoreDisplay = document.getElementById('score');
+    const bestScoreDisplay = document.getElementById('best-score');
+    const startButton = document.getElementById('start-btn');
+    const timerDisplay = document.getElementById('time-left');
+    const rulesModal = document.getElementById('rules-modal');
+    const closeRulesButton = document.getElementById('close-rules-btn');
+    const gameOverModal = document.getElementById('game-over-modal');
+    const restartButton = document.getElementById('restart-btn');
+    const finalScoreDisplay = document.getElementById('final-score');
+
+    let score = 0;
+    let bestScore = localStorage.getItem('bestScore') || 0;
+    let gameInterval;
+    let countdownInterval;
+    let timeLeft = 30;
+    let balloonSpawnRate = 600; // Initial spawn rate in ms
+    let balloonSpeed = 2; // Initial speed of balloons
+    let balloonsSpawned = 0; // Track number of balloons spawned
+
+    bestScoreDisplay.textContent = bestScore;
+
+    // Function to generate a random color for the balloons
+    function getRandomColor() {
+      const colors = ['red', 'green', 'blue', 'yellow', 'purple', 'orange'];
+      return colors[Math.floor(Math.random() * colors.length)];
+    }
+
+    function createBalloon() {
+      const balloon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      balloon.setAttribute('class', 'balloon');
+      balloon.setAttribute('width', '80');
+      balloon.setAttribute('height', '120');
+      balloon.setAttribute('style', `left: ${Math.random() * (gameArea.clientWidth - 80)}px; bottom: -130px;`);
+
+      balloon.innerHTML = `
+        <circle cx="40" cy="40" r="30" fill="${getRandomColor()}"/>
+        <line x1="40" y1="70" x2="40" y2="120" stroke="black" stroke-width="2"/>
+      `;
+
+      balloon.style.animationDuration = `${balloonSpeed}s`;
+
+      balloon.addEventListener('click', handleItemClick);
+      gameArea.appendChild(balloon);
+      balloon.style.opacity = 1;
+      balloonsSpawned++;
+    }
+
+    function createBomb() {
+      const bomb = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      bomb.setAttribute('class', 'bomb');
+      bomb.setAttribute('width', '80');
+      bomb.setAttribute('height', '120');
+      bomb.setAttribute('style', `left: ${Math.random() * (gameArea.clientWidth - 80)}px; bottom: -130px;`);
+
+      bomb.innerHTML = `
+        <circle cx="40" cy="40" r="30" fill="black"/>
+        <line x1="40" y1="20" x2="40" y2="0" stroke="red" stroke-width="4"/>
+        <line x1="40" y1="0" x2="30" y2="-10" stroke="red" stroke-width="4"/>
+        <line x1="40" y1="0" x2="50" y2="-10" stroke="red" stroke-width="4"/>
+      `;
+
+      bomb.style.animationDuration = `${balloonSpeed}s`;
+
+      bomb.addEventListener('click', handleItemClick);
+      gameArea.appendChild(bomb);
+      bomb.style.opacity = 1;
+    }
+
+    function startGame() {
+      score = 0;
+      timeLeft = 30;
+      scoreDisplay.textContent = score;
+      timerDisplay.textContent = timeLeft;
+      gameArea.innerHTML = '';
+      gameOverModal.style.display = 'none';
+      balloonsSpawned = 0; // Reset the count of balloons spawned
+      clearInterval(gameInterval);
+      clearInterval(countdownInterval);
+      countdownInterval = setInterval(updateTimer, 1000);
+      gameInterval = setInterval(spawnItem, balloonSpawnRate);
+      rulesModal.style.display = 'none';
+    }
+
+    function spawnItem() {
+      const isBomb = Math.random() < 0.15; // 15% chance to spawn a bomb
+      isBomb ? createBomb() : createBalloon();
+      
+      // Adjust spawn rate and speed over time
+      if (balloonsSpawned > 30) { // After 30 balloons
+        balloonSpawnRate = Math.max(200, balloonSpawnRate - 10); // Increase spawn rate faster
+        balloonSpeed = Math.max(1, balloonSpeed - 0.05); // Speed up balloons faster
+        clearInterval(gameInterval); // Clear previous interval
+        gameInterval = setInterval(spawnItem, balloonSpawnRate); // Set new interval
+        balloonsSpawned = 0; // Reset counter after increasing difficulty
+      }
+
+      // Increase density in the last 10 seconds
+      if (timeLeft <= 10) {
+        balloonSpawnRate = Math.max(200, balloonSpawnRate - 50); // Speed up even more
+      }
+    }
+
+    function handleItemClick(event) {
+      const item = event.target.closest('svg');
+      if (item.classList.contains('balloon')) {
+        score += 10;
+        scoreDisplay.textContent = score;
+      } else if (item.classList.contains('bomb')) {
+        score -= 5;
+        scoreDisplay.textContent = score;
+      }
+      item.style.transform = 'scale(0.5)';
+      setTimeout(() => {
+        item.remove();
+      }, 200);
+    }
+
+    function updateTimer() {
+      timeLeft--;
+      timerDisplay.textContent = timeLeft;
+      if (timeLeft <= 0) {
+        endGame();
+      }
+    }
+
+    function endGame() {
+      clearInterval(gameInterval);
+      clearInterval(countdownInterval);
+      gameOverModal.style.display = 'flex';
+      finalScoreDisplay.textContent = score;
+      if (score > bestScore) {
+        bestScore = score;
+        localStorage.setItem('bestScore', bestScore);
+        bestScoreDisplay.textContent = bestScore;
+      }
+    }
+
+    startButton.addEventListener('click', startGame);
+    closeRulesButton.addEventListener('click', () => {
+      rulesModal.style.display = 'none';
+    });
+    restartButton.addEventListener('click', startGame);
+    
+    // Show rules modal on page load
+    window.onload = () => {
+      rulesModal.style.display = 'flex';
+    };
+  </script>
+</body>
+</html>
+
